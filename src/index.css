@@ -1,0 +1,140 @@
+@import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
+
+:root {
+  --text: #3d3a42;
+  --text-heading: #1a1820;
+  --text-muted: #6b6575;
+  --bg: #faf9f6;
+  --card-bg: #ffffff;
+  --item-bg: #f8f7f4;
+  --item-hover: #f0efe9;
+  --empty-bg: #f5f4f0;
+  --input-bg: #ffffff;
+  --border: #e5e3dc;
+  --accent: #2d5a4a;
+  --accent-subtle: rgba(45, 90, 74, 0.08);
+  --accent-border: rgba(45, 90, 74, 0.25);
+  --error: #b91c1c;
+  --shadow: rgba(0, 0, 0, 0.06);
+  --header-bg: rgba(250, 249, 246, 0.95);
+
+  --sans: 'Source Sans 3', system-ui, sans-serif;
+  --serif: 'Libre Baskerville', Georgia, serif;
+  --mono: ui-monospace, 'Cascadia Code', Consolas, monospace;
+
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #d4d2d8;
+    --text-heading: #f5f4f7;
+    --text-muted: #9d98a8;
+    --bg: #1c1b1f;
+    --card-bg: #252428;
+    --item-bg: #2e2d32;
+    --item-hover: #36353b;
+    --empty-bg: #28272b;
+    --input-bg: #2e2d32;
+    --border: #3d3b42;
+    --accent: #5a9a82;
+    --accent-subtle: rgba(90, 154, 130, 0.12);
+    --accent-border: rgba(90, 154, 130, 0.35);
+    --error: #ef4444;
+    --shadow: rgba(0, 0, 0, 0.3);
+    --header-bg: rgba(28, 27, 31, 0.95);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+h1, h2, h3 {
+  font-family: var(--serif);
+  font-weight: 700;
+  color: var(--text-heading);
+}
+
+h1 { font-size: 2rem; }
+h2 { font-size: 1.25rem; }
+h3 { font-size: 1.1rem; }
+
+.btn {
+  padding: 0.65rem 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: inherit;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  border: none;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #234a3d;
+  color: white;
+}
+
+.btn-remove {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.btn-remove:hover {
+  background: rgba(185, 28, 28, 0.1);
+  color: var(--error);
+  border-color: rgba(185, 28, 28, 0.3);
+}
+
+.btn-secondary {
+  background: var(--item-bg);
+  color: var(--text-heading);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover {
+  background: var(--item-hover);
+  border-color: var(--text-muted);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+}
+
+.btn-ghost:hover {
+  background: var(--item-hover);
+  color: var(--text);
+}
+
+@media (max-width: 640px) {
+  .feed-form-row {
+    flex-direction: column;
+  }
+
+  .feed-input-name {
+    flex: 1;
+  }
+}
