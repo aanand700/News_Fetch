@@ -197,9 +197,8 @@ function EditorialBrief({ onSave }: EditorialBriefProps) {
       {isExpanded && (
         <div className="editorial-body">
           <p className="editorial-desc">
-            Define what kind of articles you want the system to fetch and rank. When you run a fetch,
-            the LLM uses this brief to filter and rank articles. Set <code>OPENAI_API_KEY</code> in
-            the backend environment for LLM filtering.
+            Describe what you want: topics, tone, what to emphasize or avoid, and how articles should be
+            ranked. When you run a fetch, this brief is used to choose and order articles from your feeds.
           </p>
 
           {error && (
