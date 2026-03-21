@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
-import { db } from '../db/schema.js';
+import { db, run } from '../db/schema.js';
 import { authMiddleware, type AuthPayload } from '../middleware/auth.js';
 
 const router = Router();
@@ -22,6 +22,32 @@ router.get('/', async (req: Request, res: Response) => {
   }[];
 
   res.json(rows);
+});
+
+router.get('/:id', async (req: Request, res: Response) => {
+  const { userId } = (req as Request & { user: AuthPayload }).user;
+  const { id } = req.params;
+
+  const row = (await db
+    .prepare(
+      `SELECT id, name, instruction_text as instructionText, created_at as createdAt
+       FROM editorial_templates WHERE id = ? AND user_id = ?`
+    )
+    .get(id, userId)) as
+    | {
+        id: string;
+        name: string;
+        instructionText: string;
+        createdAt: string;
+      }
+    | undefined;
+
+  if (!row) {
+    res.status(404).json({ error: 'Template not found' });
+    return;
+  }
+
+  res.json(row);
 });
 
 router.post('/', async (req: Request, res: Response) => {
@@ -107,13 +133,12 @@ router.delete('/:id', async (req: Request, res: Response) => {
   const { userId } = (req as Request & { user: AuthPayload }).user;
   const { id } = req.params;
 
-  // Use RETURNING instead of relying on rowCount — some pg/Neon paths report rowCount as 0
-  // even when rows were deleted, which made deletes look failed and the UI never refresh.
-  const removed = (await db
-    .prepare('DELETE FROM editorial_templates WHERE id = ? AND user_id = ? RETURNING id')
-    .all(id, userId)) as { id: string }[];
+  const { changes } = await run(
+    'DELETE FROM editorial_templates WHERE id = ? AND user_id = ?',
+    [id, userId]
+  );
 
-  if (removed.length === 0) {
+  if (changes === 0) {
     res.status(404).json({ error: 'Template not found' });
     return;
   }

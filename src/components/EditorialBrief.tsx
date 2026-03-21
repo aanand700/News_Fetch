@@ -11,6 +11,21 @@ interface Template {
 
 const STORAGE_KEY = 'news-selected-template';
 
+/** After DELETE, list can briefly still include the row (read replica / timing). Retry until gone or filter. */
+async function fetchTemplatesListAfterDelete(removedId: string): Promise<Template[]> {
+  const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const maxAttempts = 8;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const list = await api.templates.list();
+    if (!list.some((t) => t.id === removedId)) {
+      return list;
+    }
+    await delay(120 * (attempt + 1));
+  }
+  const list = await api.templates.list();
+  return list.filter((t) => t.id !== removedId);
+}
+
 interface EditorialBriefProps {
   onSave?: () => void;
 }
@@ -30,6 +45,7 @@ function EditorialBrief({ onSave }: EditorialBriefProps) {
   const [newTemplateName, setNewTemplateName] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [templateLoading, setTemplateLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -90,22 +106,58 @@ function EditorialBrief({ onSave }: EditorialBriefProps) {
 
   const handleSelectTemplate = async (templateId: string | null) => {
     setError(null);
-    setSelectedTemplateId(templateId);
+    setTemplateLoading(true);
     try {
-      if (templateId) {
-        localStorage.setItem(STORAGE_KEY, templateId);
-        const t = templates.find((x) => x.id === templateId);
-        if (t) {
-          setInstructionText(t.instructionText);
+      // Persist current saved brief before switching so edits survive round-trips (New brief ↔ saved).
+      if (selectedTemplateId && selectedTemplateId !== templateId) {
+        try {
+          await api.templates.update(selectedTemplateId, { instructionText });
+          await loadTemplates();
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Could not save this brief before switching');
+          setTemplateLoading(false);
+          return;
         }
-      } else {
-        localStorage.removeItem(STORAGE_KEY);
-        const { instructionText: text, updatedAt: at } = await api.instructions.get();
-        setInstructionText(text);
-        setUpdatedAt(at);
       }
-    } catch {
-      // ignore localStorage; instructions fetch failed — leave text as-is
+
+      if (templateId) {
+        setSelectedTemplateId(templateId);
+        try {
+          localStorage.setItem(STORAGE_KEY, templateId);
+        } catch {
+          // ignore
+        }
+        // Always load from DB so switching templates never shows stale textarea text
+        const t = await api.templates.get(templateId);
+        setInstructionText(t.instructionText);
+        setTemplates((prev) => {
+          const ix = prev.findIndex((x) => x.id === t.id);
+          if (ix >= 0) {
+            const next = [...prev];
+            next[ix] = t;
+            return next;
+          }
+          return [...prev, t];
+        });
+      } else {
+        setSelectedTemplateId(null);
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+        } catch {
+          // ignore
+        }
+        setInstructionText('');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load that brief');
+      setSelectedTemplateId(null);
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {
+        // ignore
+      }
+    } finally {
+      setTemplateLoading(false);
     }
   };
 
@@ -168,18 +220,35 @@ function EditorialBrief({ onSave }: EditorialBriefProps) {
     setError(null);
     const idToRemove = selectedTemplateId;
     try {
-      await api.templates.delete(idToRemove);
-      setTemplates((prev) => prev.filter((x) => x.id !== idToRemove));
+      try {
+        await api.templates.delete(idToRemove);
+      } catch (err) {
+        // Delete may have succeeded on the server but the client got an error — resync from API
+        const list = await fetchTemplatesListAfterDelete(idToRemove);
+        if (!list.some((x) => x.id === idToRemove)) {
+          setTemplates(list);
+          setSelectedTemplateId(null);
+          try {
+            localStorage.removeItem(STORAGE_KEY);
+          } catch {
+            // ignore
+          }
+          setInstructionText('');
+          return;
+        }
+        setError(err instanceof Error ? err.message : 'Failed to delete template');
+        return;
+      }
+
+      const list = await fetchTemplatesListAfterDelete(idToRemove);
+      setTemplates(list);
       setSelectedTemplateId(null);
       try {
         localStorage.removeItem(STORAGE_KEY);
       } catch {
         // ignore
       }
-      await loadTemplates();
-      await loadInstructions();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete template');
+      setInstructionText('');
     } finally {
       setSaving(false);
     }
@@ -238,9 +307,10 @@ function EditorialBrief({ onSave }: EditorialBriefProps) {
                 className="editorial-template-select"
                 aria-label="Load a saved brief"
                 value={selectedTemplateId ?? ''}
+                disabled={templateLoading || saving}
                 onChange={(e) => void handleSelectTemplate(e.target.value || null)}
               >
-                <option value="">Custom — what’s applied on the server</option>
+                <option value="">New brief</option>
                 {templates.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
@@ -251,7 +321,7 @@ function EditorialBrief({ onSave }: EditorialBriefProps) {
                 type="button"
                 className="btn btn-remove btn-small editorial-delete-btn"
                 onClick={() => void handleDeleteTemplate()}
-                disabled={saving || !selectedTemplateId}
+                disabled={saving || templateLoading || !selectedTemplateId}
                 title={
                   selectedTemplateId
                     ? `Delete “${selectedTemplate?.name ?? 'saved brief'}”`
@@ -262,9 +332,11 @@ function EditorialBrief({ onSave }: EditorialBriefProps) {
               </button>
             </div>
             <p className="editorial-saved-hint">
-              {selectedTemplateId
-                ? 'You’re editing a saved copy. Use “Save to this brief” to update it, or Apply to use this text for the next fetch.'
-                : 'Edit the box below, then Apply. Save a copy anytime with the name field.'}
+              {templateLoading
+                ? 'Loading…'
+                : selectedTemplateId
+                  ? 'You’re editing a saved brief. Use “Save to this brief” to store changes, or “Apply for next fetch” to use this text on the next run.'
+                  : 'New brief: start with an empty editor below. Add your criteria, then save with a name or apply for the next fetch.'}
             </p>
           </div>
 
@@ -282,7 +354,7 @@ function EditorialBrief({ onSave }: EditorialBriefProps) {
               type="button"
               className="btn btn-primary"
               onClick={() => void handleApply()}
-              disabled={saving}
+              disabled={saving || templateLoading}
             >
               {saving ? 'Applying…' : 'Apply for next fetch'}
             </button>
@@ -292,7 +364,7 @@ function EditorialBrief({ onSave }: EditorialBriefProps) {
                 type="button"
                 className="btn btn-secondary"
                 onClick={() => void handleUpdateTemplate()}
-                disabled={saving}
+                disabled={saving || templateLoading}
               >
                 {saving ? 'Saving…' : 'Save to this brief'}
               </button>
@@ -314,7 +386,7 @@ function EditorialBrief({ onSave }: EditorialBriefProps) {
                   type="button"
                   className="btn btn-secondary"
                   onClick={() => void handleSaveAsTemplate()}
-                  disabled={saving}
+                  disabled={saving || templateLoading}
                 >
                   {saving ? 'Saving…' : 'Save copy'}
                 </button>
