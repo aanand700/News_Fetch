@@ -56,18 +56,53 @@
   line-height: 1.5;
 }
 
-.editorial-templates {
+.editorial-saved-briefs {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--item-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.editorial-saved-briefs-heading {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.editorial-saved-briefs-row {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
+  gap: 0.5rem;
   flex-wrap: wrap;
 }
 
-.editorial-templates label {
-  font-size: 0.95rem;
-  font-weight: 500;
-  color: var(--text-heading);
+.editorial-delete-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.editorial-saved-hint {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0.6rem 0 0;
+  line-height: 1.45;
+}
+
+.editorial-save-new-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.editorial-save-new-inline .editorial-template-name-input {
+  flex: 1;
+  min-width: 10rem;
+  max-width: 18rem;
 }
 
 .editorial-template-select {
@@ -90,13 +125,6 @@
   background: var(--input-bg);
   color: var(--text);
   width: 12rem;
-}
-
-.editorial-save-template-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
 }
 
 .btn-small {

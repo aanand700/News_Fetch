@@ -28,7 +28,6 @@ function EditorialBrief({ onSave }: EditorialBriefProps) {
     }
   });
   const [newTemplateName, setNewTemplateName] = useState('');
-  const [showNewTemplateInput, setShowNewTemplateInput] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +59,7 @@ function EditorialBrief({ onSave }: EditorialBriefProps) {
     setLoading(true);
     const [, list] = await Promise.all([loadInstructions(), loadTemplates()]);
     setLoading(false);
-    // Restore selected template from localStorage after templates load
+
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved && list.some((t) => t.id === saved)) {
@@ -70,20 +69,28 @@ function EditorialBrief({ onSave }: EditorialBriefProps) {
           setInstructionText(t.instructionText);
         }
       } else {
-        setInstructionText('');
+        if (saved) {
+          try {
+            localStorage.removeItem(STORAGE_KEY);
+          } catch {
+            // ignore
+          }
+        }
+        setSelectedTemplateId(null);
+        // Keep instructionText from loadInstructions — do not clear
       }
     } catch {
-      setInstructionText('');
+      setSelectedTemplateId(null);
     }
   }, [loadInstructions, loadTemplates]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   const handleSelectTemplate = async (templateId: string | null) => {
+    setError(null);
     setSelectedTemplateId(templateId);
-    setShowNewTemplateInput(false);
     try {
       if (templateId) {
         localStorage.setItem(STORAGE_KEY, templateId);
@@ -93,19 +100,24 @@ function EditorialBrief({ onSave }: EditorialBriefProps) {
         }
       } else {
         localStorage.removeItem(STORAGE_KEY);
-        setInstructionText('');
+        const { instructionText: text, updatedAt: at } = await api.instructions.get();
+        setInstructionText(text);
+        setUpdatedAt(at);
       }
     } catch {
-      // ignore localStorage errors
+      // ignore localStorage; instructions fetch failed — leave text as-is
     }
   };
 
   const handleApply = async () => {
     setSaving(true);
+    setError(null);
     try {
       const res = await api.instructions.update(instructionText);
       setUpdatedAt(res.updatedAt);
       onSave?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to apply brief');
     } finally {
       setSaving(false);
     }
@@ -118,7 +130,6 @@ function EditorialBrief({ onSave }: EditorialBriefProps) {
     try {
       const created = await api.templates.create(name, instructionText);
       setNewTemplateName('');
-      setShowNewTemplateInput(false);
       await loadTemplates();
       setSelectedTemplateId(created.id);
       try {
@@ -149,12 +160,15 @@ function EditorialBrief({ onSave }: EditorialBriefProps) {
 
   const handleDeleteTemplate = async () => {
     if (!selectedTemplateId) return;
-    if (!confirm('Delete this template?')) return;
+    const t = templates.find((x) => x.id === selectedTemplateId);
+    const label = t?.name?.trim() ? `“${t.name}”` : 'this saved brief';
+    if (!confirm(`Delete ${label}? This cannot be undone.`)) return;
+
     setSaving(true);
+    setError(null);
     try {
       await api.templates.delete(selectedTemplateId);
       setSelectedTemplateId(null);
-      setInstructionText('');
       try {
         localStorage.removeItem(STORAGE_KEY);
       } catch {
@@ -162,6 +176,8 @@ function EditorialBrief({ onSave }: EditorialBriefProps) {
       }
       await loadTemplates();
       await loadInstructions();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete template');
     } finally {
       setSaving(false);
     }
@@ -174,6 +190,10 @@ function EditorialBrief({ onSave }: EditorialBriefProps) {
       </section>
     );
   }
+
+  const selectedTemplate = selectedTemplateId
+    ? templates.find((x) => x.id === selectedTemplateId)
+    : null;
 
   return (
     <section className="editorial-brief">
@@ -207,32 +227,43 @@ function EditorialBrief({ onSave }: EditorialBriefProps) {
               <button type="button" onClick={() => setError(null)}>Dismiss</button>
             </div>
           )}
-          <div className="editorial-templates">
-            <label htmlFor="template-select">Template:</label>
-            <select
-              id="template-select"
-              className="editorial-template-select"
-              value={selectedTemplateId ?? ''}
-              onChange={(e) => void handleSelectTemplate(e.target.value || null)}
-            >
-              <option value="">— New brief —</option>
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-            {selectedTemplateId && (
+
+          <div className="editorial-saved-briefs">
+            <div className="editorial-saved-briefs-heading">Saved briefs</div>
+            <div className="editorial-saved-briefs-row">
+              <select
+                id="template-select"
+                className="editorial-template-select"
+                aria-label="Load a saved brief"
+                value={selectedTemplateId ?? ''}
+                onChange={(e) => void handleSelectTemplate(e.target.value || null)}
+              >
+                <option value="">Custom — what’s applied on the server</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
               <button
                 type="button"
-                className="btn btn-ghost btn-small"
-                onClick={handleDeleteTemplate}
-                disabled={saving}
-                title="Delete template"
+                className="btn btn-remove btn-small editorial-delete-btn"
+                onClick={() => void handleDeleteTemplate()}
+                disabled={saving || !selectedTemplateId}
+                title={
+                  selectedTemplateId
+                    ? `Delete “${selectedTemplate?.name ?? 'saved brief'}”`
+                    : 'Select a saved brief to delete it'
+                }
               >
-                Delete
+                Delete saved brief
               </button>
-            )}
+            </div>
+            <p className="editorial-saved-hint">
+              {selectedTemplateId
+                ? 'You’re editing a saved copy. Use “Save to this brief” to update it, or Apply to use this text for the next fetch.'
+                : 'Edit the box below, then Apply. Save a copy anytime with the name field.'}
+            </p>
           </div>
 
           <textarea
@@ -243,66 +274,49 @@ function EditorialBrief({ onSave }: EditorialBriefProps) {
             rows={20}
             spellCheck={false}
           />
+
           <div className="editorial-actions">
             <button
               type="button"
               className="btn btn-primary"
-              onClick={handleApply}
+              onClick={() => void handleApply()}
               disabled={saving}
             >
-              {saving ? 'Applying…' : 'Apply'}
+              {saving ? 'Applying…' : 'Apply for next fetch'}
             </button>
+
             {selectedTemplateId ? (
               <button
                 type="button"
                 className="btn btn-secondary"
-                onClick={handleUpdateTemplate}
+                onClick={() => void handleUpdateTemplate()}
                 disabled={saving}
               >
-                {saving ? 'Updating…' : 'Update template'}
+                {saving ? 'Saving…' : 'Save to this brief'}
               </button>
             ) : (
-              <>
-                {showNewTemplateInput ? (
-                  <div className="editorial-save-template-row">
-                    <input
-                      type="text"
-                      className="editorial-template-name-input"
-                      placeholder="Template name"
-                      value={newTemplateName}
-                      onChange={(e) => setNewTemplateName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleSaveAsTemplate();
-                        if (e.key === 'Escape') setShowNewTemplateInput(false);
-                      }}
-                      autoFocus
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={handleSaveAsTemplate}
-                      disabled={saving}
-                    >
-                      {saving ? 'Saving…' : 'Save'}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-ghost"
-                      onClick={() => { setShowNewTemplateInput(false); setNewTemplateName(''); }}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setShowNewTemplateInput(true)}
-                  >
-                    Save as new template
-                  </button>
-                )}
-              </>
+              <div className="editorial-save-new-inline">
+                <input
+                  id="new-template-name"
+                  type="text"
+                  className="editorial-template-name-input"
+                  placeholder="Name for new saved brief"
+                  aria-label="Name for new saved brief"
+                  value={newTemplateName}
+                  onChange={(e) => setNewTemplateName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void handleSaveAsTemplate();
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => void handleSaveAsTemplate()}
+                  disabled={saving}
+                >
+                  {saving ? 'Saving…' : 'Save copy'}
+                </button>
+              </div>
             )}
           </div>
         </div>

@@ -1,18 +1,30 @@
 import { Pool } from 'pg';
 
-// Neon/Vercel may use POSTGRES_URL; we also accept DATABASE_URL
-const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
-
-if (!connectionString) {
-  throw new Error(
-    'DATABASE_URL or POSTGRES_URL is required. Set it to your Postgres connection string (e.g. from Neon).'
+function getConnectionString(): string | undefined {
+  return (
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.POSTGRES_PRISMA_URL
   );
 }
 
-const pool = new Pool({
-  connectionString,
-  ssl: connectionString?.includes('localhost') ? false : { rejectUnauthorized: false },
-});
+let pool: Pool | null = null;
+
+function getPool(): Pool {
+  if (!pool) {
+    const connectionString = getConnectionString();
+    if (!connectionString) {
+      throw new Error(
+        'DATABASE_URL (or POSTGRES_URL) is required. In Vercel: connect Neon to this project or add DATABASE_URL under Environment Variables.'
+      );
+    }
+    pool = new Pool({
+      connectionString,
+      ssl: connectionString.includes('localhost') ? false : { rejectUnauthorized: false },
+    });
+  }
+  return pool;
+}
 
 export function convertPlaceholders(sql: string): string {
   let i = 0;
@@ -24,7 +36,7 @@ export async function query<T = Record<string, unknown>>(
   params: unknown[] = []
 ): Promise<T[]> {
   const converted = convertPlaceholders(sql);
-  const result = await pool.query(converted, params);
+  const result = await getPool().query(converted, params);
   return result.rows as T[];
 }
 
@@ -38,7 +50,7 @@ export async function queryOne<T = Record<string, unknown>>(
 
 export async function run(sql: string, params: unknown[] = []): Promise<{ changes: number }> {
   const converted = convertPlaceholders(sql);
-  const result = await pool.query(converted, params);
+  const result = await getPool().query(converted, params);
   return { changes: result.rowCount ?? 0 };
 }
 
@@ -48,20 +60,20 @@ export const db = {
     const converted = convertPlaceholders(sql);
     return {
       get: async (...params: unknown[]) => {
-        const result = await pool.query(converted, params);
+        const result = await getPool().query(converted, params);
         return result.rows[0];
       },
       all: async (...params: unknown[]) => {
-        const result = await pool.query(converted, params);
+        const result = await getPool().query(converted, params);
         return result.rows;
       },
       run: async (...params: unknown[]) => {
-        const result = await pool.query(converted, params);
+        const result = await getPool().query(converted, params);
         return { changes: result.rowCount ?? 0 };
       },
     };
   },
   async exec(sql: string) {
-    await pool.query(sql);
+    await getPool().query(sql);
   },
 };

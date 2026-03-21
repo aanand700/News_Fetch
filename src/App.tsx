@@ -149,8 +149,21 @@ function App() {
         )}
         {llmConfigured === false && (
           <div className="app-llm-warning">
-            <strong>LLM filtering is off.</strong> Create <code>backend/.env</code> with{' '}
-            <code>OPENAI_API_KEY=sk-your-key</code>, then restart the backend. Without it, all articles are stored with heuristic scoring.
+            <strong>LLM filtering is off.</strong>{' '}
+            {import.meta.env.PROD ? (
+              <>
+                In Vercel: <strong>Project → Settings → Environment Variables</strong>. Add{' '}
+                <code>OPENAI_API_KEY</code> (exact name) with your <code>sk-...</code> key, enable{' '}
+                <strong>Production</strong>, then <strong>Redeploy</strong>. No quotes around the value.
+                If the key is already set, redeploy—env changes apply after a new deployment.
+              </>
+            ) : (
+              <>
+                Create <code>backend/.env</code> with <code>OPENAI_API_KEY=sk-your-key</code>, then restart
+                the backend.
+              </>
+            )}{' '}
+            Without it, all articles are stored with heuristic scoring.
           </div>
         )}
         {loading ? (
