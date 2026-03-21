@@ -107,9 +107,13 @@ router.delete('/:id', async (req: Request, res: Response) => {
   const { userId } = (req as Request & { user: AuthPayload }).user;
   const { id } = req.params;
 
-  const result = await db.prepare('DELETE FROM editorial_templates WHERE id = ? AND user_id = ?').run(id, userId);
+  // Use RETURNING instead of relying on rowCount — some pg/Neon paths report rowCount as 0
+  // even when rows were deleted, which made deletes look failed and the UI never refresh.
+  const removed = (await db
+    .prepare('DELETE FROM editorial_templates WHERE id = ? AND user_id = ? RETURNING id')
+    .all(id, userId)) as { id: string }[];
 
-  if (result.changes === 0) {
+  if (removed.length === 0) {
     res.status(404).json({ error: 'Template not found' });
     return;
   }

@@ -166,8 +166,10 @@ function EditorialBrief({ onSave }: EditorialBriefProps) {
 
     setSaving(true);
     setError(null);
+    const idToRemove = selectedTemplateId;
     try {
-      await api.templates.delete(selectedTemplateId);
+      await api.templates.delete(idToRemove);
+      setTemplates((prev) => prev.filter((x) => x.id !== idToRemove));
       setSelectedTemplateId(null);
       try {
         localStorage.removeItem(STORAGE_KEY);
